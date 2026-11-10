@@ -1,0 +1,415 @@
+% Informe de laboratorio 2 - Sistema de monitorización y control
+% Proyecto para Overleaf: subir este .tex junto con referencias.bib e imagenes/.
+% COMPILADOR: pdfLaTeX. Bibliografía: Biber (biblatex, estilo APA).
+% Completar los enlaces, la gráfica experimental y el diagrama físico antes de entregar.
+\documentclass[11pt,letterpaper]{article}
+
+\usepackage[english,spanish,es-tabla]{babel}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage{microtype}
+\usepackage[margin=2.45cm,headheight=15pt]{geometry}
+\usepackage{graphicx}
+\usepackage{float}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{booktabs,tabularx,array,multirow}
+\usepackage{amsmath,amssymb}
+\usepackage{siunitx}
+\sisetup{output-decimal-marker={,},per-mode=symbol,detect-all}
+\usepackage{xcolor}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta,positioning,shapes.geometric,calc,fit,babel}
+\usepackage{pgfplots}
+\pgfplotsset{compat=1.18}
+\usepackage{hyperref}
+\usepackage{fancyhdr}
+\usepackage{enumitem}
+\usepackage{csquotes}
+\usepackage[backend=biber,style=apa,sorting=nyt,language=spanish]{biblatex}
+\addbibresource{referencias.bib}
+\AtBeginBibliography{\small}
+
+\definecolor{azul}{HTML}{174B6B}
+\definecolor{turquesa}{HTML}{137F92}
+\definecolor{naranja}{HTML}{C9692E}
+\definecolor{gris}{HTML}{4F5B66}
+\definecolor{fondo}{HTML}{F3F7F9}
+\hypersetup{colorlinks=true,linkcolor=azul,citecolor=azul,urlcolor=turquesa,pdfauthor={Gabriel Ibañez y Jhonattan Suarez},pdftitle={Sistema de monitorización y control de temperatura con ESP32}}
+\captionsetup{font=small,labelfont=bf,justification=centering}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{5pt}
+\setlist[itemize]{nosep,leftmargin=1.5em}
+\setlist[enumerate]{nosep,leftmargin=1.5em}
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\footnotesize Microcontroladores | Laboratorio 2}
+\fancyhead[R]{\footnotesize UFPS}
+\fancyfoot[C]{\thepage}
+\renewcommand{\headrulewidth}{0.35pt}
+\renewcommand{\arraystretch}{1.16}
+
+% -------------- REEMPLAZAR ANTES DE ENTREGAR --------------
+\newcommand{\Repositorio}{\textbf{[PEGAR AQUÍ ENLACE DEL REPOSITORIO]}}
+\newcommand{\VideoDemostracion}{\textbf{[PEGAR AQUÍ ENLACE DEL VIDEO]}}
+% Si ya dispone de las gráficas exportadas por v3.py, guarde
+% un archivo vectorial llamado "ensayo_temperatura.pdf" en graficas/.
+% -----------------------------------------------------------
+
+\begin{document}
+\begin{center}
+  {\small \textbf{Universidad Francisco de Paula Santander}\\
+  Programa de Ingeniería Electrónica -- Cúcuta, Colombia\\
+  Asignatura: Microcontroladores \quad | \quad Docente: Sergio Sepúlveda}\\[0.9em]
+  {\LARGE\bfseries Sistema de monitorización y control de temperatura con ESP32}\\[0.4em]
+  {\large Informe del Design Challenge -- Laboratorio 2}\\[0.8em]
+  {\normalsize \textbf{Gabriel Ibañez} (Código: 1162168)\\
+  \textbf{Jhonattan Suarez} (Código: 1161299)}\\[0.5em]
+  {\small Cúcuta, Colombia -- 2026}
+\end{center}
+\vspace{0.25em}\hrule\vspace{0.5em}
+
+\begin{otherlanguage}{english}
+\begin{abstract}
+For this laboratory project, we built a small chamber to test temperature monitoring and control with an ESP32. Two incandescent bulbs were used for heating and a four-wire fan for cooling. The temperature was measured with a K-type thermocouple connected to a MAX6675 module. We programmed a manual mode, in which two potentiometers set the outputs, and an automatic mode, in which two linear relationships change the heating or cooling duty cycle according to the measured temperature. The fan received a 25 kHz PWM signal, while the lamps were switched by a solid-state relay in five-second windows. We also used an OLED screen and a Python application to view the readings. One photograph shows 41.8~\textdegree C on the OLED with a 43.0~\textdegree C setpoint, which gives a difference of 1.2~\textdegree C at that instant. The photographs confirm that the monitoring interface was operating, but they do not provide enough information to calculate settling time or steady-state error. We also found that the setpoint shown in the photos differs from the range configured in the supplied firmware. A complete recorded test with the final program is therefore needed to assess the controller's performance.
+\end{abstract}
+\end{otherlanguage}
+\vspace{-0.4em}
+\noindent\textbf{Palabras clave:} ESP32; temperatura; termocupla tipo K; MAX6675; PWM; control proporcional; monitorización.\vspace{0.25em}
+
+\section{Introducción}
+Medir la temperatura es relativamente sencillo; lo que resulta más interesante es usar esa lectura para decidir cuándo calentar y cuándo enfriar. En esta práctica trabajamos precisamente con ese problema. La idea fue que una ESP32 leyera la temperatura dentro de una cámara pequeña y controlara dos actuadores con efectos contrarios: unas lámparas que aportan calor y un ventilador que lo retira.
+
+Antes de montar el sistema revisamos trabajos relacionados con el uso de microcontroladores en control térmico. \textcite{fonseca2022} propusieron llevar un laboratorio educativo de temperatura a placas ESP32. En otro trabajo, \textcite{rahmat2023} utilizaron una plataforma de laboratorio para supervisar la temperatura y estudiar su control. También encontramos una aplicación con ESP32 y un ventilador de corriente continua cuyo accionamiento cambia con la temperatura \parencite{azmi2025}. Estos ejemplos fueron útiles porque muestran distintas maneras de reunir medición, actuación y visualización en un mismo proyecto.
+
+Existen estrategias más elaboradas, como las que comparan controladores PID y difusos \parencite{salve2026}. Sin embargo, el objetivo de este laboratorio era trabajar con dos rectas de control y señales PWM. Por eso implementamos una regla para las lámparas cuando la temperatura está por debajo de la referencia y otra para el ventilador cuando la supera. También incluimos un modo manual para comprobar las salidas sin depender del control automático.
+
+\subsection{Objetivo}
+Construir un sistema de control de temperatura con ESP32 que permita leer una termocupla, manejar las lámparas y el ventilador de forma manual y ajustar ambos actuadores automáticamente mediante dos relaciones lineales respecto a una temperatura de referencia.
+
+\section{Materiales y métodos}
+\subsection{Montaje y herramientas utilizadas}
+Para hacer las pruebas armamos una cámara de cartón. En la parte alta ubicamos dos lámparas y, en el extremo opuesto, un ventilador. La termocupla quedó dentro de la cámara. Por fuera colocamos el circuito de control, la pantalla y los elementos de ajuste. En la fotografía general (Figura~\ref{fig:montaje}) se ve el montaje conectado a los equipos del laboratorio y a un computador.
+
+La Tabla~\ref{tab:materiales} resume los componentes identificados en las imágenes y en los archivos del programa. En los casos en que no tenemos el modelo exacto del dispositivo, lo indicamos en vez de asignarle una referencia que no pudimos comprobar.
+
+\begin{table}[H]
+\centering\small
+\caption{Elementos y herramientas identificados en el material entregado.}
+\label{tab:materiales}
+\begin{tabularx}{\textwidth}{@{}p{3.5cm}X@{}}
+\toprule
+\textbf{Elemento} & \textbf{Uso en el proyecto} \\
+\midrule
+ESP32 DevKit & Lectura de entradas, ejecución del control y generación de señales de salida. \\
+Termocupla tipo K + MAX6675 & Medición digital de temperatura. El MAX6675 tiene resolución nominal de \SI{0.25}{\celsius} \parencite{analog2021}. \\
+Dos lámparas incandescentes de \SI{50}{\watt} & Actuadores de calentamiento (potencia nominal conjunta: \SI{100}{\watt}, según comentarios del código). \\
+Relé de estado sólido (SSR) & Conmutación temporizada del calentamiento. No se identifica su modelo en los archivos. \\
+Ventilador de cuatro conductores & Refrigeración con entrada de control PWM a \SI{25}{\kilo\hertz}. \\
+Pantalla OLED SSD1306, \num{128} $\times$ \num{64} & Visualización del modo, temperatura, referencia y porcentajes de accionamiento. \\
+Dos potenciómetros y tres pulsadores & Ajuste manual de actuadores; selección de modo y modificación de la referencia. \\
+PlatformIO y framework Arduino & Desarrollo del firmware para placa \texttt{esp32dev}; plataforma \texttt{espressif32 @\textasciicircum 3.0.0}. \\
+Bibliotecas en \texttt{platformio.ini} & MAX6675 \texttt{\textasciicircum 1.1.2}, Adafruit SSD1306 \texttt{\textasciicircum 2.5.7}, Adafruit GFX \texttt{\textasciicircum 1.11.5}. \\
+Python y bibliotecas de escritorio & Interfaz \texttt{v3.py} con Tkinter, Matplotlib, pandas y comunicación serial mediante \texttt{pyserial}. \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}[b]{0.58\textwidth}
+\centering\includegraphics[width=\linewidth]{imagenes/montaje_laboratorio.jpg}
+\caption{Ensayo en el laboratorio.}
+\end{subfigure}\hfill
+\begin{subfigure}[b]{0.36\textwidth}
+\centering\includegraphics[width=\linewidth,height=5.05cm,keepaspectratio]{imagenes/camara_interior.jpg}
+\caption{Interior de la cámara.}
+\end{subfigure}
+\caption{Prototipo fotografiado durante el desarrollo de la práctica. Fuente: fotografías suministradas por los autores.}
+\label{fig:montaje}
+\end{figure}
+
+\subsection{Conexiones de control}
+Tomamos la distribución de pines directamente de \texttt{main.cpp}. Las conexiones de control aparecen en la Tabla~\ref{tab:pines}, pero es importante aclarar que el programa no permite conocer por sí solo todo el cableado de alimentación y potencia. Esos detalles deben revisarse con el circuito físico antes de elaborar el diagrama definitivo.
+
+\begin{table}[H]
+\centering\small
+\caption{Asignación de señales en el firmware.}
+\label{tab:pines}
+\begin{tabular}{@{}lll@{}}
+\toprule
+\textbf{Dispositivo o señal} & \textbf{ESP32} & \textbf{Función}\\
+\midrule
+MAX6675 -- CS, SCK, SO & GPIO 5, 18, 19 & Lectura de temperatura\\
+SSR -- control & GPIO 26 & Accionamiento de lámparas\\
+Ventilador -- PWM & GPIO 27 & Control de refrigeración\\
+Potenciómetro lámparas & GPIO 32 (ADC) & Control manual 1\\
+Potenciómetro ventilador & GPIO 33 (ADC) & Control manual 2\\
+Pulsador MODO & GPIO 25 & Manual / automático\\
+Pulsador AUMENTAR & GPIO 15 & Aumentar referencia\\
+Pulsador DISMINUIR & GPIO 4 & Disminuir referencia\\
+Pantalla OLED & Bus I\textsuperscript{2}C & SDA/SCL: comprobar cableado\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[font=\scriptsize,>=Latex, every node/.style={align=center}]
+\node[draw=azul,fill=fondo,very thick,rounded corners,minimum width=3.2cm,minimum height=4.15cm] (esp) at (0,0) {};
+\node[font=\bfseries\small,align=center] at (0,1.55) {ESP32 DevKit};
+\node[align=center] at (0,0.65) {Lectura de sensores\\y entradas};
+\node[align=center] at (0,-0.22) {Cálculo de PWM\\y control SSR};
+\node[align=center] at (0,-1.18) {Envío serial / OLED};
+\tikzset{mod/.style={draw,rounded corners=2pt,fill=white,minimum width=3.35cm,minimum height=0.77cm},conn/.style={-Latex,thick,draw=turquesa}}
+\node[mod] (termo) at (-5.05,1.63) {Termocupla K + MAX6675\\CS 5, SCK 18, SO 19};
+\node[mod] (potes) at (-5.05,0.35) {Potenciómetros\\ADC 32 y ADC 33};
+\node[mod] (bot) at (-5.05,-0.93) {Pulsadores\\GPIO 25, 15, 4};
+\node[mod] (oled) at (5.05,1.63) {OLED SSD1306\\Bus I\textsuperscript{2}C};
+\node[mod] (ssr) at (5.05,0.35) {Señal GPIO 26 $\rightarrow$ SSR\\Dos lámparas (calor)};
+\node[mod] (fan) at (5.05,-0.93) {Señal GPIO 27 $\rightarrow$ ventilador\\PWM, 25 kHz};
+\node[mod] (pc) at (5.05,-2.2) {Computadora\\USB/serial, 115200 baudios};
+\draw[conn] (termo.east)--(-1.67,1.63);
+\draw[conn] (potes.east)--(-1.67,.35);
+\draw[conn] (bot.east)--(-1.67,-.93);
+\draw[conn] (1.67,1.63)--(oled.west);
+\draw[conn] (1.67,.35)--(ssr.west);
+\draw[conn] (1.67,-.93)--(fan.west);
+\draw[conn] (1.2,-1.85) -| (pc.west);
+\end{tikzpicture}
+\caption{Esquema vectorial de señales basado en el firmware. No representa el cableado de potencia. Para la entrega definitiva puede anexarse también el diagrama físico validado en Fritzing.}
+\label{fig:conexiones}
+\end{figure}
+
+\subsection{Procedimiento seguido}
+El trabajo se dividió en varias partes. Primero organizamos la cámara de prueba y ubicamos los elementos de calentamiento, enfriamiento y medición. Después conectamos la ESP32 con el módulo MAX6675, las entradas de los potenciómetros, los pulsadores, la OLED y las señales que controlan los actuadores.
+
+En el programa configuramos dos formas de trabajo. Con el modo manual, cada potenciómetro modifica el porcentaje de salida de un actuador. Con el modo automático, ese porcentaje depende de la temperatura que lee la termocupla. Agregamos, además, un filtro de lectura, comprobaciones para detectar un fallo del sensor y un corte por sobretemperatura. Finalmente, usamos la pantalla y el monitor en Python para observar los datos. Las imágenes incluidas documentan el montaje, pero para estudiar la respuesta a lo largo del tiempo hace falta adjuntar un registro completo de una prueba.
+
+\subsection{Algoritmo y diagrama de flujo}
+El programa comienza en modo manual. En el ciclo principal se revisan los botones, se lee el sensor y se calculan las salidas; también se actualizan la pantalla y la comunicación serial. Para no detener todas las tareas mientras se espera una lectura, usamos \texttt{millis()} como base de tiempo. Según los valores del código, el sensor se consulta cada \SI{250}{\milli\second}, el control se calcula cada \SI{100}{\milli\second} y la OLED se actualiza cada \SI{200}{\milli\second}. Los datos seriales se envían cada \SI{250}{\milli\second}.
+
+El diagrama de la Figura~\ref{fig:flujo} resume las decisiones principales. Si hay una condición de alarma, el programa apaga las lámparas y ordena ventilación máxima. Si no hay alarma, utiliza los potenciómetros o las ecuaciones automáticas, según el modo seleccionado.
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[scale=.95,transform shape,font=\scriptsize,>=Stealth,node distance=5.5mm,
+ start/.style={ellipse,draw=azul,thick,fill=fondo,minimum width=2.5cm,minimum height=.65cm,align=center},
+ proc/.style={rectangle,draw=azul,thick,rounded corners=1pt,fill=white,text width=4.1cm,minimum height=.67cm,align=center},
+ input/.style={trapezium,trapezium left angle=70,trapezium right angle=110,draw=azul,thick,fill=fondo,text width=3.5cm,minimum height=.63cm,align=center},
+ decision/.style={diamond,draw=naranja,thick,aspect=2.4,inner sep=1.2pt,align=center,text width=2.15cm},
+ flow/.style={->,thick}]
+\node[start] (start) {Inicio};
+\node[proc,below=of start] (setup) {Configurar pines, PWM, OLED y serial};
+\node[input,below=of setup] (read) {Leer botones y temperatura};
+\node[decision,below=8mm of read] (alarm) {¿Hay alarma?};
+\node[proc,below left=12mm and 2.1cm of alarm] (safe) {Lámparas al 0\%\\Ventilador al 100\%};
+\node[decision,below right=12mm and 2.1cm of alarm] (mode) {¿Modo automático?};
+\node[proc,below left=12mm and .5cm of mode] (manual) {Obtener duty a partir de los potenciómetros};
+\node[proc,below right=12mm and .5cm of mode] (auto) {Calcular duty con las dos rectas};
+\node[proc,below=20mm of manual,xshift=2.45cm] (out) {Actualizar SSR, ventilador, OLED y registro serial};
+\node[start,below=of out] (loop) {Repetir ciclo};
+\draw[flow] (start)--(setup);
+\draw[flow] (setup)--(read);
+\draw[flow] (read)--(alarm);
+\draw[flow] (alarm)--node[above left,font=\tiny]{Sí}(safe);
+\draw[flow] (alarm)--node[above right,font=\tiny]{No}(mode);
+\draw[flow] (mode)--node[above left,font=\tiny]{No}(manual);
+\draw[flow] (mode)--node[above right,font=\tiny]{Sí}(auto);
+\draw[flow] (safe.south) |- (out.west);
+\draw[flow] (manual.south) |- (out.west);
+\draw[flow] (auto.south) |- (out.east);
+\draw[flow] (out)--(loop);
+\end{tikzpicture}
+\caption{Diagrama de flujo general del firmware. Los bloques de decisión representan la prioridad de las alarmas y la selección de modo.}
+\label{fig:flujo}
+\end{figure}
+
+\subsection{Cálculo del control automático}
+El archivo \texttt{main.cpp} inicia con un setpoint de $SP=\SI{60}{\celsius}$. También tiene una banda de $B=\SI{1}{\celsius}$ y un rango proporcional de $R=\SI{20}{\celsius}$. Aunque el programa permite modificar el setpoint con los pulsadores entre \SI{50}{\celsius} y \SI{100}{\celsius}, para evaluar una prueba de control se debe dejar fijo durante la medición.
+
+Las lámparas trabajan cuando la temperatura está por debajo de la referencia. A medida que la cámara se calienta, su porcentaje baja hasta llegar a cero antes del setpoint. En cambio, el ventilador comienza a actuar cuando la temperatura supera la referencia y aumenta su porcentaje de forma lineal. Para las lámparas utilizamos la siguiente expresión:
+\begin{equation}
+D_{\mathrm{lamp}}(T)=
+\begin{cases}
+100, & T\leq SP-R,\\
+100\dfrac{SP-B-T}{R-B}, & SP-R<T<SP-B,\\
+0, & T\geq SP-B.
+\end{cases}
+\label{eq:lamp}
+\end{equation}
+Para el ventilador se usa una segunda recta:
+\begin{equation}
+D_{\mathrm{vent}}(T)=
+\begin{cases}
+0, & T\leq SP,\\
+100\dfrac{T-SP}{R}, & SP<T<SP+R,\\
+100, & T\geq SP+R.
+\end{cases}
+\label{eq:fan}
+\end{equation}
+El resultado de cada ecuación queda entre 0 y 100\%. En esta versión los porcentajes mínimos configurados son cero, por lo que las rectas parten de ese valor.
+
+No usamos la misma señal eléctrica para ambos actuadores. El ventilador trabaja con PWM a \SI{25}{\kilo\hertz} y 8 bits de resolución, es decir, 256 niveles posibles. Para las lámparas se usa un SSR que conmuta durante una parte de una ventana de \SI{5}{\second}. Por ejemplo, con una orden de 40\%, el SSR permanece encendido aproximadamente dos segundos y apagado tres segundos de cada ventana. Esto se hace porque un SSR de corriente alterna no debe manejarse con el PWM rápido del ventilador.
+
+Para reducir cambios pequeños en la lectura, también incluimos un filtro exponencial:
+\begin{equation}
+T_f[k]=0.7\,T_f[k-1]+0.3\,T_{\mathrm{leida}}[k].
+\label{eq:filtro}
+\end{equation}
+
+Por último, el código contempla dos casos de protección: cuatro lecturas inválidas consecutivas y temperatura de \SI{110}{\celsius} o más. En esas condiciones deja el calentamiento en 0\% y lleva el ventilador al 100\%. El rearme de sobretemperatura ocurre cuando la lectura baja a \SI{105}{\celsius}. Estas decisiones del programa son medidas adicionales; no sustituyen una protección eléctrica y térmica independiente.
+
+\section{Resultados}
+\subsection{Implementación e interfaz}
+En las fotografías se aprecia el prototipo conectado en el laboratorio, con las dos lámparas y el ventilador dentro de la cámara. La placa de control tiene la ESP32, la OLED y los botones. La pantalla muestra la temperatura, la referencia y los porcentajes de las salidas. Al mismo tiempo, en el computador se ve el programa de seguimiento con gráficas de temperatura y de accionamiento.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=.52\textwidth,height=9cm,keepaspectratio]{imagenes/interfaz_esp32.jpg}
+\caption{Placa de mando con ESP32, OLED y entradas de usuario. Fotografía suministrada por los autores.}
+\label{fig:placa}
+\end{figure}
+
+\subsection{Datos visibles en el registro fotográfico}
+Para no confundir una fotografía con una prueba completa, tomamos únicamente los números que alcanzan a verse en las pantallas. Estos valores se presentan en la Tabla~\ref{tab:capturas}. Corresponden a instantes diferentes y no permiten calcular, por ejemplo, cuánto tardó la cámara en estabilizarse.
+
+\begin{table}[H]
+\centering\small
+\caption{Valores observables en las fotografías del montaje.}
+\label{tab:capturas}
+\begin{tabular}{@{}lrrrrr@{}}
+\toprule
+\textbf{Pantalla} & \textbf{$T$ (\si{\celsius})} & \textbf{$SP$ (\si{\celsius})} & \textbf{$T-SP$ (\si{\celsius})} & \textbf{Lámpara (\%)} & \textbf{Vent. (\%)}\\
+\midrule
+OLED del prototipo & 41,8 & 43,0 & $-1,2$ & 49 & 0\\
+Aplicación de escritorio & 42,1 & 43,0 & $-0,9$ & 47 & 0\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}[t]{.48\textwidth}
+\centering
+\begin{tikzpicture}
+\begin{axis}[width=\linewidth,height=5.1cm,ybar,bar width=15pt,ymin=0,ymax=52,
+  ylabel={Temperatura (\si{\celsius})},symbolic x coords={OLED,PC},xtick=data,
+  legend style={at={(.5,1.02)},anchor=south,font=\tiny,legend columns=2},
+  grid=major,grid style={gray!15},tick label style={font=\scriptsize},label style={font=\scriptsize}]
+\addplot[fill=turquesa,draw=turquesa] coordinates {(OLED,41.8) (PC,42.1)};
+\addplot[fill=naranja,draw=naranja] coordinates {(OLED,43) (PC,43)};
+\legend{Medida,Referencia}
+\end{axis}
+\end{tikzpicture}
+\caption{Temperatura y referencia.}
+\end{subfigure}\hfill
+\begin{subfigure}[t]{.48\textwidth}
+\centering
+\begin{tikzpicture}
+\begin{axis}[width=\linewidth,height=5.1cm,ybar,bar width=15pt,ymin=0,ymax=60,
+ ylabel={Ciclo de trabajo (\%)},symbolic x coords={OLED,PC},xtick=data,
+ legend style={at={(.5,1.02)},anchor=south,font=\tiny,legend columns=2},
+ grid=major,grid style={gray!15},tick label style={font=\scriptsize},label style={font=\scriptsize}]
+\addplot[fill=naranja,draw=naranja] coordinates {(OLED,49) (PC,47)};
+\addplot[fill=turquesa,draw=turquesa] coordinates {(OLED,0) (PC,0)};
+\legend{Lámparas,Ventilador}
+\end{axis}
+\end{tikzpicture}
+\caption{Valores mostrados de PWM.}
+\end{subfigure}
+\caption{Representación vectorial de dos variables del registro fotográfico. No representa una prueba temporal ni garantiza que ambas capturas correspondan al mismo firmware.}
+\label{fig:capturas}
+\end{figure}
+
+\subsection{Comportamiento teórico de las rectas implementadas}
+También graficamos las dos ecuaciones usando $SP=\SI{60}{\celsius}$, que es el valor inicial del programa recibido. En la Figura~\ref{fig:rectas} puede verse que las lámparas pasan de 100\% a 0\% entre \SI{40}{\celsius} y \SI{59}{\celsius}, mientras que el ventilador pasa de 0\% a 100\% entre \SI{60}{\celsius} y \SI{80}{\celsius}. Esta es una gráfica calculada con las fórmulas, no una curva experimental de temperatura.
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}
+\begin{axis}[width=.86\textwidth,height=6.5cm,xmin=30,xmax=90,ymin=-4,ymax=108,
+  xlabel={Temperatura, $T$ (\si{\celsius})},ylabel={Ciclo de trabajo (\%)},
+  xtick={30,40,50,59,60,70,80,90},ytick={0,25,50,75,100},
+  legend pos=north east,legend style={font=\small},grid=major,
+  grid style={gray!18},tick label style={font=\small}]
+\addplot[very thick,naranja,mark=none] coordinates {(30,100) (40,100) (59,0) (90,0)};
+\addplot[very thick,turquesa,mark=none] coordinates {(30,0) (60,0) (80,100) (90,100)};
+\addplot[densely dashed,black!55] coordinates {(60,-4) (60,105)};
+\legend{Lámparas,Ventilador,$SP=60$ °C}
+\end{axis}
+\end{tikzpicture}
+\caption{Rectas de control programadas para $SP=\SI{60}{\celsius}$, $R=\SI{20}{\celsius}$ y $B=\SI{1}{\celsius}$. Gráfico teórico vectorial.}
+\label{fig:rectas}
+\end{figure}
+
+\subsection{Registro dinámico y métricas de evaluación}
+La aplicación \texttt{v3.py} recibe las lecturas por el puerto serial. Guarda tiempo, temperatura, setpoint, porcentajes de los dos actuadores, modo de trabajo y estado de alarma. Además de mostrar las curvas, puede exportar los datos a Excel y las gráficas a PDF o PNG. El código incluye funciones para calcular tiempo de subida, sobreimpulso, tiempo de establecimiento, error final y oscilación. Para utilizar esos resultados debemos tener una sesión registrada y mantener fijo el setpoint durante la parte que se vaya a analizar.
+
+\IfFileExists{graficas/ensayo_temperatura.pdf}{%
+\begin{figure}[H]
+\centering\includegraphics[width=.93\textwidth]{graficas/ensayo_temperatura.pdf}
+\caption{Curvas de temperatura, referencia y ciclos de trabajo exportadas de un ensayo real.}
+\label{fig:ensayo}
+\end{figure}
+}{%
+\begin{figure}[H]
+\centering
+\fcolorbox{azul}{fondo}{\parbox[c][3.0cm][c]{.84\textwidth}{\centering
+\textbf{Espacio para el resultado temporal del ensayo}\\[3pt]
+Exportar la gráfica real desde \texttt{v3.py} como PDF y guardarla en\\
+\texttt{graficas/ensayo\_temperatura.pdf}.\\[3pt]
+\small Debe mostrar temperatura, setpoint y ciclos de trabajo contra el tiempo.}}
+\caption{Gráfica experimental pendiente de incorporar. No se aportó un archivo de registros en los anexos recibidos.}
+\end{figure}
+}
+
+En los archivos compartidos para este informe no encontramos todavía un CSV o Excel de una prueba completa. Por eso dejamos el espacio de la gráfica sin llenarlo con valores supuestos. Con ese registro podremos calcular las métricas y comparar el comportamiento observado con las rectas programadas.
+
+\section{Discusión}
+Lo más importante de las fotografías es que muestran el montaje armado y la información de temperatura tanto en la OLED como en el computador. También muestran que la lectura está cerca del valor de referencia en esos momentos. Sin embargo, ver dos números próximos no significa que ya se haya comprobado la estabilidad del control. Para eso se necesita observar cómo cambia la temperatura durante varios minutos, desde el inicio hasta que se acerca al setpoint.
+
+Al comparar las fotos con el código encontramos un punto que debemos aclarar antes de entregar el informe final. En las pantallas aparece un setpoint de \SI{43}{\celsius}. En cambio, el \texttt{main.cpp} adjunto arranca en \SI{60}{\celsius} y no permite bajar de \SI{50}{\celsius}. Los porcentajes mostrados en las fotos tampoco coinciden con los que producirían las ecuaciones de esta versión para una referencia de \SI{43}{\celsius}. Esto indica que las capturas podrían corresponder a otra configuración o versión del programa, algo que debemos comprobar con el historial del proyecto. Por esa razón no utilizamos las capturas como validación de las rectas actuales.
+
+Otro aspecto a tener en cuenta es que el MAX6675 puede entregar lecturas con resolución de \SI{0.25}{\celsius}, pero la resolución no equivale a la exactitud de todo el sistema \parencite{analog2021}. Para caracterizarlo haría falta comparar el sensor con una referencia y revisar cómo responden realmente el ventilador y las lámparas. Además, la cámara de las fotos está hecha de cartón y contiene lámparas que generan calor. El montaje debe tratarse como una demostración supervisada, no como un equipo para dejar funcionando sin vigilancia. Para un uso continuo sería necesario cambiar la cámara por un material no combustible e incorporar protecciones térmicas y eléctricas apropiadas.
+
+\section{Conclusiones}
+Con este proyecto reunimos varias tareas que habíamos trabajado por separado: lectura de temperatura, entradas analógicas, generación de PWM, manejo de actuadores y visualización de datos. La ESP32 se encarga de leer la termocupla y decidir qué salida activar según el modo elegido. El programa también incluye un filtro para la medición y acciones de seguridad cuando detecta un problema.
+
+En el código quedaron definidos valores concretos que podemos comprobar: PWM de \SI{25}{\kilo\hertz} para el ventilador, ventanas de \SI{5}{\second} para las lámparas y lectura del sensor cada \SI{250}{\milli\second}. En una de las fotografías se observa una temperatura de \SI{41.8}{\celsius} frente a un setpoint de \SI{43}{\celsius}, es decir, una diferencia puntual de \SI{1.2}{\celsius}. Este dato describe ese momento de la prueba; no es suficiente para afirmar que el sistema ya estaba estable.
+
+La práctica nos permitió entender mejor por qué no basta con escribir las ecuaciones: también hay que revisar conexiones, observar el comportamiento físico y guardar datos que permitan comprobar el resultado. Trabajar en equipo fue necesario para organizar el montaje, la programación y las pruebas. Para cerrar la evaluación del control nos falta registrar una sesión completa con la versión definitiva del firmware y aclarar la diferencia entre el setpoint del código y el de las fotos. Esa comprobación es la que permitirá pasar de un prototipo que funciona a un resultado que se pueda demostrar con datos.
+
+\printbibliography[title={Referencias}]
+
+\appendix
+\section{Código fuente y archivos del proyecto}
+El código se entregará mediante un repositorio para que este informe no se extienda con los archivos completos. El enlace se agrega en el siguiente campo:
+
+\begin{center}
+\fcolorbox{azul}{fondo}{\parbox{.9\textwidth}{\centering\vspace{3pt}\Repositorio\vspace{3pt}}}
+\end{center}
+
+El repositorio debe contener: \texttt{main.cpp} (control y adquisición en la ESP32), \texttt{platformio.ini} (configuración y dependencias) y \texttt{v3.py} (monitor de escritorio y exportación de datos). Se recomienda incluir además instrucciones de ejecución y el archivo de una sesión experimental.
+
+\section{Video demostrativo}
+En el siguiente espacio se puede agregar el video de la práctica. Conviene que muestre el montaje, el cambio de modo, las salidas y la información de la pantalla:
+\begin{center}
+\fcolorbox{azul}{fondo}{\parbox{.9\textwidth}{\centering\vspace{3pt}\VideoDemostracion\vspace{3pt}}}
+\end{center}
+
+\section{Diagrama físico de conexiones}
+La Figura~\ref{fig:conexiones} muestra cómo se comunican los bloques según el programa. No incluye los cables de potencia ni la alimentación completa. Para cumplir ese punto de la rúbrica, debemos anexar el diagrama del cableado real hecho en Fritzing o un programa similar.
+
+\IfFileExists{graficas/conexiones_fritzing.pdf}{%
+\begin{center}\includegraphics[width=.94\textwidth]{graficas/conexiones_fritzing.pdf}\end{center}
+}{%
+\begin{center}\fcolorbox{azul}{fondo}{\parbox[c][2.7cm][c]{.9\textwidth}{\centering
+\textbf{Agregar aquí el diagrama físico de Fritzing}\\
+Exportar como PDF vectorial y guardar en\\
+\texttt{graficas/conexiones\_fritzing.pdf}.}}
+\end{center}
+}
+
+\end{document}
